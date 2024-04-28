@@ -1,3 +1,103 @@
-a = ew
-b = e
-print (a+b)
+// Define pin numbers and constants
+#define BLYNK_PRINT Serial        // Menggunakan Serial monitor Blynk printing 
+#include <ESP8266WiFi.h>          // WiFi library
+#include <BlynkSimpleEsp8266.h>   // Blynk library
+
+#define TRIG  D8                  // Menentukan pin trigger ultrasonik pada pin esp
+#define ECHO  D7                  // Menentukan pin echo ultrasonik pada pin esp
+#define SERVO D6                  // Menentukan pin signal servo
+#define DISTANCE_THRESHOLD  30    // Ambang batas jarak ultrasonik untuk memicu servo
+                                  // dengan jarak 30 cm
+
+#define WIFI_SSID "Elkapride"     // Nama WiFi network
+#define WIFI_PASSWORD "ngiritbos" // Password WiFi network
+
+#define BLYNK_TEMPLATE_ID "TMPL650zRwq68"   // Blynk template ID
+#define BLYNK_TEMPLATE_NAME "Tempat Sampah" // Blynk app name
+#define BLYNK_AUTH_TOKEN "B4n9V4K66tedA7Yw93QEnpUMgT6mZo_y" // Blynk authentication token
+
+// Servo library
+#include <Servo.h>
+Servo servo;
+
+float duration_us, distance_cm; // Variabel untuk pembacaan ultrasonik
+                                // durasi_microsecond, jarak_cm
+BlynkTimer timer;
+
+// Fungsi sendSensor untuk mengirim data ke Blynk
+void sendSensor() {
+  digitalWrite(TRIG, LOW);    // Menyetel pin trigger ke LOW
+  delayMicroseconds(2);       // Menunggu 2 microsecond
+  digitalWrite(TRIG, HIGH);   // Menyetel pin echo ke HIGH
+  delayMicroseconds(10);      // Menunggu 2 microsecond
+  digitalWrite(TRIG, LOW);    // Menyetel pin trigger ke LOW lagi
+
+  duration_us = pulseIn(ECHO, HIGH);  // Mengukur durasi pulsa echo
+  distance_cm = 0.017 * duration_us;  // Menghitung jarak berdasarkan rumus kecepatan suara
+                                      // V=s*t => 0.034 / 2 * durasi
+
+  Serial.print("distance: ");         // Mencetak "distance: " ke serial monitor
+  Serial.print(distance_cm);          // Mencetak hasil perhitungan variabel "distance_cm"
+  Serial.println(" cm");              // Mencetak " cm" ke serial monitor setelah variabel
+  delay(500);                         // Menunda 500 milisecond
+
+  Blynk.virtualWrite(V0, distance_cm);  //  mengirim nilai "distance_cm" ke pin virtual 0 di Blynk
+}
+
+// Fungsi checkServo untuk mengontrol servo dan mengirim data ke Blynk
+void checkServo() {
+  digitalWrite(TRIG, LOW);    // Menyetel pin trigger ke LOW
+  delayMicroseconds(2);       // Menunggu 2 microsecond
+  digitalWrite(TRIG, HIGH);   // Menyetel pin echo ke HIGH
+  delayMicroseconds(10);      // Menunggu 2 microsecond
+  digitalWrite(TRIG, LOW);    // Menyetel pin trigger ke LOW lagi
+
+  duration_us = pulseIn(ECHO, HIGH);  // Mengukur durasi pulsa echo
+  distance_cm = 0.017 * duration_us;  // Menghitung jarak berdasarkan rumus kecepatan suara
+                                      // V=s*t => 0.034 / 2 * durasi
+
+  if (distance_cm < DISTANCE_THRESHOLD) { // Jika variabel "distance_cm" kurang dari "DISTANCE_THRESHOLD"
+                                          // yaitu 30 cm, maka
+    servo.write(180);           // Servo berotasi sebesar 90 derajat (dibagi 2)(lebih dari 180 tidak bisa)
+    Blynk.virtualWrite(V1, 1);  // Mengirim nilai 1 ke pin virtual 1 di Blynk (seperti indikator buka)
+  }  
+  else {                        // jika tidak, maka
+    servo.write(0);             // Servo berotasi semula yaitu pada 0 derajat servo
+    Blynk.virtualWrite(V1, 0);  // Mengirim nilai 0 ke pin virtual 1 di Blynk (seperti indikator tutup)
+  }
+
+  Serial.print("distance: ");   // Mencetak "distance: " ke serial monitor
+  Serial.print(distance_cm);    // Mencetak hasil perhitungan variabel "distance_cm"
+  Serial.println(" cm");        // Mencetak " cm" ke serial monitor setelah variabel
+  delay(500);                   // Menunda 500 milisecond
+}
+
+// Fungsi setup
+void setup() {
+  Serial.begin (9600);    // Inisialisasi komunikasi serial untuk debugging pada 9600 baud
+  pinMode(TRIG, OUTPUT);  // Menyetel pin trigger sebagai output
+  pinMode(ECHO, INPUT);   // Menyetel pin echo sebagai input
+  servo.attach(SERVO);    // Memasang pin signal servo ke pin yang telah ditentukan yaitu D6
+  servo.write(0);         // Menginisialisasi posisi awal servo di 0
+
+// Mengkoneksikan jaringan WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) { 
+    Serial.print(".");
+    delay(300);
+  }
+  Serial.println("\nConnected with IP: ");
+  Serial.println(WiFi.localIP());
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASSWORD); // Menginisialisasi komunikasi library Blynk
+  timer.setInterval(500L, sendSensor); // Menyetel interval 500 miliseconds untuk fungsi "sendSensor"
+  timer.setInterval(500L, checkServo); // Menyetel interval 500 miliseconds untuk fungsi "checkServo"
+}
+
+void loop() {
+  Blynk.run();  // Menjalankan fungsi Blynk
+                // Menjaga komunikasi pada cloud Blynk untuk menerima atau mengirim data sesuai kebutuhan
+  timer.run();  // Menjalankan timer Blynk
+                // Menjalankan pengatur waktu yang telah dibuat pada fungsi "sendSensor" dan "checkServo"
+}
